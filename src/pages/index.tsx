@@ -2,38 +2,56 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { Inter } from 'next/font/google';
 import styles from '@/styles/Home.module.css';
-import { useEffect, useState } from 'react';
+import { ChangeEvent, DOMElement, useEffect, useState } from 'react';
 import FetchAPI from './API_Proxy';
-import data from '../data.json';
 import * as Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 
 const inter = Inter({ subsets: ['latin'] });
 
-// [ [1, 1] ]
-
 export default function Home() {
-    console.log(data);
+    const [symbolData, setSymbolData] = useState([]);
+    const [symbols, setSymbols] = useState([]);
+    const [selectedSymbol, setSelectedSymbol] = useState("");
+
+    const handleSearchInput = (e: any) => {
+        const searchTerm = e?.target?.value;
+        if (searchTerm && searchTerm.length >= 2) {
+            const symbolFetch = new FetchAPI(
+                `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${searchTerm}&apikey=${process.env.NEXT_PUBLIC_API_KEY}`,
+            );
+            symbolFetch.getFetchRequest().then((data) => {
+                setSymbols(data.bestMatches);
+            });
+        }
+    };
+
+    const handleSymbolSelect = (e: any): void => {
+        const stocksDataFetch = new FetchAPI(
+            `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${e?.target?.value}&apikey=${process.env.NEXT_PUBLIC_API_KEY}`,
+        );
+        stocksDataFetch.getFetchRequest().then((data) => setSymbolData(data));
+        setSelectedSymbol(e?.target?.value)
+    };
 
     function formatDate(date: string): number {
-        return new Date(date).getTime(); //might need milliseconds in a day if highcharts doesnt fix day accuracy issue that exists within the new Date function (86,400,000)
+        return new Date(date).getTime();
     }
-    const dailyData = data['Time Series (Daily)']; // {'12/12/1 : {high: 0}}
 
-    // [12/21/21, 12/21/22, ]
-    console.log(Object.keys(dailyData));
-    const timeSeriesData = Object.keys(dailyData).map((dateKey: string) => {
+    const dailyData = symbolData['Time Series (Daily)'] || {}; // {'12/12/1 : {high: 0}}
+
+    const timeSeriesData: number[][] = Object.keys(dailyData).map((dateKey: string) => {
         return [formatDate(dateKey), Number(dailyData[dateKey]['2. high'])];
     });
 
     console.log(timeSeriesData);
-    
+
     const options: Highcharts.Options = {
         title: {
-            text: `Daily High For IBM`,
+            text: `${selectedSymbol}`,
         },
         xAxis: {
-            type: 'datetime',
+            type: 'datetime'
         },
         yAxis: {
             title: {
@@ -48,29 +66,8 @@ export default function Home() {
         ],
     };
 
-    // const [stockData, setStockData] = useState([])
-    // const [search, setSearch] = useState("")
-    // const [searchSubmit, setSearchSubmit] = useState("")
-    // //console.log(process.env.NEXT_PUBLIC_API_KEY) `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${searchSubmit}&apikey=${process.env.NEXT_PUBLIC_API_KEY}`
-
-    // const handleSymbolSearchSubmit = (e: any) => {
-    //   e.preventDefault()
-    //   setSearchSubmit(search)
-    // }
-
-    // const handleSearchInput = (e: any) => {
-    //   setSearch(e.target.value.toUpperCase())
-    // }
-
-    // const stocksDataFetch = new FetchAPI(`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${searchSubmit}&apikey=${process.env.NEXT_PUBLIC_API_KEY}`)
-
-    // useEffect(()=>{
-    //   stocksDataFetch.getFetchRequest()
-    //   .then(setStockData)
-    // }, [])
-
-    // console.log(stockData)
-    // console.log(searchSubmit)
+    // TODO: throttling vs debouncing - which to use here and why?
+    // TODO: how to limit requests by using the cache? it should refresh daily - look up TTL - can this be set to midnight?
 
     return (
         <>
@@ -81,17 +78,21 @@ export default function Home() {
                 <link rel="icon" href="/favicon.ico" />
             </Head>
             <main className={styles.main}>
-                {/* <form onSubmit={handleSymbolSearchSubmit}>
-          <input type="text" placeHolder="Search symbol here..." value={search} onChange={handleSearchInput} />
-          <input type="submit" value="Submit"/>
-        </form> */}
+                <input type="text" placeholder="Search symbol here..." onChange={handleSearchInput} />
+                <select onChange={handleSymbolSelect}>
+                    {symbols.map((sym) => (
+                        <option value={sym['1. symbol']} key={sym['1. symbol']}>
+                            {sym['2. name']}
+                        </option>
+                    ))}
+                </select>
                 <HighchartsReact highcharts={Highcharts} options={options} />
             </main>
         </>
     );
 }
 
-/*sites to keep in mind:
+/*documentation sites to keep in mind:
 https://rapidapi.com/alphavantage/api/alpha-vantage
 https://www.alphavantage.co/documentation/
 https://jsfiddle.net/gh/get/library/pure/highcharts/highcharts/tree/master/samples/stock/demo/basic-line/ - Highcharts stock example
